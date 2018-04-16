@@ -138,6 +138,55 @@ function _backtrackNumbers(i_oSudokuBoard, i_nRow, i_nFrom, i_nTo) {
     return l_nColumn;
 }
 
+//=============================================================================
+function _generateDifficultyPlaySheet(i_nDifficulty) {
+    let l_nRow,
+        l_nColumn,
+        l_nMinBlanks,
+        l_nMaxBlanks,
+        l_aPlaySheet = JSON.parse(JSON.stringify(this.board)); // copy of play sheet
+
+
+    if (i_nDifficulty === 2) {
+        // hard -> 6 -> 9 blank per row
+        l_nMinBlanks = 6;
+        l_nMaxBlanks = 9;
+    } else if (i_nDifficulty === 1) {
+        // medium 5 -> 8 blank per row
+        l_nMinBlanks = 5;
+        l_nMaxBlanks = 8;
+    } else {
+        // easy, 3->7 blank per row
+        l_nMinBlanks = 3;
+        l_nMaxBlanks = 7;
+    }
+
+    l_aPlaySheet.forEach(_blankCells.bind(this, l_nMinBlanks, l_nMaxBlanks));
+
+    return l_aPlaySheet;
+}
+
+//=============================================================================
+function _generateSignature(i_aBoard, i_aPlaySheets) {
+    let i,
+        l_aFlatSheet,
+        l_aBlankSpots = [],
+        l_aSignatureChunks = [[].concat(...i_aBoard).join("")]; // 0 - solution, 1- easy sheet, 2- medium sheet, 3- hard sheet
+
+    for (i = 0; i < i_aPlaySheets.length; i++) {
+        l_aFlatSheet = [].concat(...i_aPlaySheets[i]);
+
+        l_aFlatSheet.forEach((i_xCellContent, i_nIdx) => {
+            if (i_xCellContent === "") {
+                l_aBlankSpots.push(i_nIdx);
+            }
+        });
+        l_aSignatureChunks.push(JSON.stringify(l_aBlankSpots));
+        l_aBlankSpots.length = 0;
+    }
+
+    return Buffer.from(l_aSignatureChunks.join(":")).toString('base64');
+}
 
 // weakmap for private variables
 let g_oPrivateVars = new WeakMap();
@@ -174,6 +223,7 @@ class SudokuBoard {
             l_nBacktrackNumber = BACKTRACK_INCREMENT,
             l_nBacktrackCollisions = 0,
             l_aClusters = [], // initialize clusters
+            l_aPlaySheets = [],
             l_nClusterIdx;
 
         // build clusters
@@ -235,9 +285,16 @@ class SudokuBoard {
             }
         }
 
-        this.signature = Buffer.from(this.board.map(i_aRow => i_aRow.join("")).join("")).toString('base64');
+        // generate all difficulty levels
+        l_aPlaySheets.push(_generateDifficultyPlaySheet.call(this, 0));
+        l_aPlaySheets.push(_generateDifficultyPlaySheet.call(this, 1));
+        l_aPlaySheets.push(_generateDifficultyPlaySheet.call(this, 2));
+
+        // generate unique signature for board and all difficulty levels
+        this.signature = _generateSignature(this.board, l_aPlaySheets);
+
         g_oPrivateVars.get(this).clusters.length = 0;
-        g_oPrivateVars.delete(this);
+        g_oPrivateVars.get(this).playSheets = l_aPlaySheets;
 
         return this.board; // returns solution board
     }
@@ -249,45 +306,51 @@ class SudokuBoard {
      */
     //=============================================================================
     getSheet(i_nDifficulty) {
-        let l_nRow,
-            l_nColumn,
-            l_nMinBlanks,
-            l_nMaxBlanks,
-            l_aPlaySheet = JSON.parse(JSON.stringify(this.board)); // copy of play sheet
+        let l_nDifficulty = i_nDifficulty || 0,
+            l_aPlaySheets = g_oPrivateVars.get(this).playSheets,
+            l_aPlaySheet;
 
+        l_aPlaySheet = l_aPlaySheets[l_nDifficulty] || l_aPlaySheets[0];
 
-        if (i_nDifficulty === 2) {
-            // hard -> 6 -> 9 blank per row
-            l_nMinBlanks = 6;
-            l_nMaxBlanks = 9;
-        } else if (i_nDifficulty === 1) {
-            // medium 5 -> 8 blank per row
-            l_nMinBlanks = 5;
-            l_nMaxBlanks = 8;
-        } else {
-            // easy, 3->7 blank per row
-            l_nMinBlanks = 3;
-            l_nMaxBlanks = 7;
+        if (!l_aPlaySheet) {
+            l_aPlaySheet = _generateDifficultyPlaySheet(i_nDifficulty); // since it's not part of the signature, it will be random each time (only for old signatures)
         }
-
-        l_aPlaySheet.forEach(_blankCells.bind(this, l_nMinBlanks, l_nMaxBlanks));
 
         return l_aPlaySheet;
     }
-
 
     /*
      * Load previously saved sudoku board
      */
     //=============================================================================
     load(i_sSignature) {
-        let l_sRawBoard = Buffer.from(i_sSignature, 'base64').toString('ascii'),
+        let l_aChunks = Buffer.from(i_sSignature, 'base64').toString('ascii').split(":"),
+            l_sRawBoard = l_aChunks.shift(),
+            l_aPlaySheets = [],
             l_aRows;
 
         if (l_sRawBoard && l_sRawBoard.length === 81 && /^\d+$/i.test(l_sRawBoard)) {
             l_aRows = l_sRawBoard.match(/\d{9}/g);
             this.signature = i_sSignature;
             this.board = l_aRows.map(i_sRow => i_sRow.split("").map(Number));
+            l_aChunks.forEach(i_sRawPlaySheet => {
+                let l_aPlaySheet = JSON.parse(JSON.stringify(this.board)),
+                    l_aBlanks = JSON.parse(i_sRawPlaySheet),
+                    l_nRow,
+                    l_nColumn;
+
+                l_aBlanks.forEach(i_nBlankSpot => {
+                    l_nRow = Math.floor(i_nBlankSpot / 9);
+                    l_nColumn = i_nBlankSpot % 9;
+                    l_aPlaySheet[l_nRow][l_nColumn] = "";
+                });
+
+                l_aPlaySheets.push(l_aPlaySheet);
+            });
+
+            g_oPrivateVars.set(this, {
+                playSheets: l_aPlaySheets
+            });
         } else {
             throw ("Invalid signature received...");
         }

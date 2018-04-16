@@ -1,17 +1,21 @@
 {
     "name": "js-sudoku-generator",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "Sudoku generator implementation in Javascript",
     "main": "dist/js-sudoku-generator.js",
     "scripts": {
-        "test": "node src/test.js"
+        "test": "node src/test.js",
+        "dev": "webpack --config webpack.dev.js",
+        "dev-watch": "webpack -w --config webpack.dev.js",
+        "build": "webpack --config webpack.prod.js"
     },
     "repository": {
         "type": "git",
         "url": "https://github.com/boggan/js-sudoku-generator.git"
     },
     "keywords": [
-        "Sudoku", "Generator"
+        "Sudoku",
+        "Generator"
     ],
     "author": "Thomas Lanteigne",
     "license": "ISC",

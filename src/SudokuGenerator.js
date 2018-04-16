@@ -28,14 +28,13 @@ class SudokuGenerator {
 
         this.generatedBoards.length = 0;
 
-        // make sure
         for (i = 0; i < i_nNbSheets; i++) {
             l_oBoard = new SudokuBoard();
             l_oBoard.generate();
             this.generatedBoards.push(l_oBoard);
-            console.log(`Generation @ ${((i / i_nNbSheets) * 100).toFixed(2)} %`);
+            console.log(`SudokuGenerator::Generation @ ${((i / i_nNbSheets) * 100).toFixed(2)} %`);
         }
-        console.log("Generation @ 100 %");
+        console.log("SudokuGenerator::Generation @ 100 %");
 
         return this.generatedBoards;
     }
